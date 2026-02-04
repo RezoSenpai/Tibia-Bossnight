@@ -39,23 +39,39 @@
       <main class="content">
         <section class="card info-box">
           <h2>ℹ️ How teams are built</h2>
-          <p><strong>Selection order:</strong> Priority (0 = first) → vocation preference → name. Lower priority =
-            picked first; rest become backups.</p>
-          <p><strong>Complete team:</strong> Meets minimum vocations and boss rules below. If not enough sign-ups, a
-            partial team is still shown (with ⚠️); you can use it or adjust.</p>
-          <h3>Minimum requirements (complete teams)</h3>
+          <p><strong>Selection order:</strong> The script picks players in this order: first by
+            <strong>priority</strong> (0 = highest, picked first), then by <strong>vocation preference</strong> if you
+            signed up with multiple vocations for the same boss, then by name. Anyone who doesn’t fit in a team becomes
+            a <strong>back-up</strong>.</p>
+          <p><strong>Complete team:</strong> A team that meets the minimum vocation and size rules below. If there
+            aren’t enough sign-ups, a <strong>partial team</strong> is still shown (with ⚠️); you can use it or adjust
+            manually.</p>
+          <p><strong>Underfilled teams:</strong> If you ask for 2 teams but one ends up with very few players (e.g. only
+            1), the script merges everyone into one team, puts the lowest-priority overflow in back-up, and hides the
+            empty team.</p>
+          <h3>Requirements per boss (complete teams)</h3>
+          <p class="info-box-hint">“Shooters” = MS + RP combined. “Max” = team size. “Min” = minimum of that vocation.
+          </p>
           <ul class="requirements-list">
-            <li><strong>Pale (P)</strong> — 10: EK≥1, ED≥1, shooters (MS+RP)≥2</li>
-            <li><strong>Zelos (Z)</strong> — 10: EK 2–3, ED≥2, MS≥2, RP≥2; if 3 EK then ED≥3, RP≥1</li>
-            <li><strong>Ferumbras (F)</strong> — 15: EK≥2, ED≥2, MS≥1, shooters≥3</li>
-            <li><strong>Heart of Destruction (H)</strong> — 15: EK 3–6, ED≥3, MS≥1, shooters≥5</li>
-            <li><strong>Last Lore Keeper (L)</strong> — 15: EK≥4, ED≥4, MS≥1, shooters≥5</li>
-            <li><strong>Cults (C)</strong> — 10: EK≥1, ED≥1, RP≥1, shooters≥2</li>
-            <li><strong>The First Dragon (D)</strong> — 15: EK≥2, ED≥2</li>
+            <li><strong>Pale (P)</strong> — Max 10 players. Minimum 1 EK, 1 ED, and at least 2 shooters (MS + RP
+              combined).</li>
+            <li><strong>Zelos (Z)</strong> — Max 10 players. Minimum 2 EK (max 3), 2 ED, 2 MS, 2 RP. If you have 3 EKs
+              you also need at least 3 EDs and 1 RP.</li>
+            <li><strong>Ferumbras (F)</strong> — Max 15 players. Minimum 2 EK, 2 ED, at least 1 MS, and at least 3
+              shooters (MS + RP) in total.</li>
+            <li><strong>Heart of Destruction (H)</strong> — Max 15 players. Minimum 3 EK (max 6), 3 ED, at least 1 MS,
+              and at least 5 shooters in total. Team is split into 3 groups: Left, Middle, Right (5 each).</li>
+            <li><strong>Last Lore Keeper (L)</strong> — Max 15 players. Minimum 4 EK, 4 ED, at least 1 MS, and at least
+              5 shooters in total. Team is split into 4 groups: Top Left, Top Right, Bottom Left, Bottom Right.</li>
+            <li><strong>Cults (C)</strong> — Max 10 players. Minimum 1 EK, 1 ED, 1 RP, and at least 2 shooters in total.
+            </li>
+            <li><strong>The First Dragon (D)</strong> — Max 15 players. Minimum 2 EK and 2 ED.</li>
           </ul>
           <h3>Preferred setup</h3>
-          <p>Teams are filled to the boss size (10 or 15) while respecting min/max per vocation. HoD is split into 3
-            parties of 5 (Left/Mid/Right); LLK into 4 parties (Top Left, Top Right, Bottom Left, Bottom Right).</p>
+          <p>Teams are filled up to the boss size (10 or 15) while respecting the min/max per vocation. For
+            <strong>HoD</strong> the team is shown as three boxes (Left, Middle, Right); for <strong>LLK</strong> as
+            four boxes (Top Left, Top Right, Bottom Left, Bottom Right). The copy text for each team is one combined
+            message with those sections inside it.</p>
         </section>
         <section class="card">
           <h2>2. Generate teams</h2>

@@ -124,6 +124,13 @@ body {
   color: var(--text);
 }
 
+.info-box-hint {
+  font-size: 0.85rem;
+  margin: 0 0 6px;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
 .requirements-list {
   margin: 0 0 10px;
   padding-left: 20px;
@@ -272,6 +279,80 @@ body {
   margin-bottom: 20px;
 }
 
+.boss-teams-and-backup {
+  display: grid;
+  grid-template-columns: 1fr minmax(180px, 220px);
+  gap: 16px;
+  align-items: start;
+}
+
+@media (max-width: 700px) {
+  .boss-teams-and-backup {
+    grid-template-columns: 1fr;
+  }
+}
+
+.backup-box {
+  background: rgba(0, 0, 0, 0.25);
+  border-radius: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  position: sticky;
+  top: 24px;
+}
+
+.backup-box h5 {
+  margin: 0 0 8px;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.backup-slot {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  min-height: 24px;
+}
+
+.backup-slot li {
+  padding: 6px 10px;
+  margin-bottom: 4px;
+  background: var(--bg);
+  border-radius: 6px;
+  border: 1px solid transparent;
+  cursor: grab;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.9rem;
+}
+
+.backup-slot li:hover {
+  border-color: var(--accent);
+}
+
+.backup-slot li.dragging {
+  opacity: 0.5;
+}
+
+.backup-slot.placeholder-empty {
+  padding: 8px;
+  min-height: 36px;
+}
+
+.backup-slot.placeholder-empty::after {
+  content: 'Back-up list';
+  display: block;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+
+.backup-slot.drag-over {
+  border: 2px dashed var(--success);
+  background: rgba(74, 222, 128, 0.08);
+  border-radius: 6px;
+}
+
 .boss-block h4 {
   margin: 0 0 10px;
   font-size: 1.05rem;
@@ -306,6 +387,38 @@ body {
 .team-warning-icon {
   font-size: 1.1rem;
   line-height: 1;
+}
+
+.team-subparties {
+  display: grid;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.team-subparties-hod {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.team-subparties-llk {
+  grid-template-columns: repeat(2, 1fr);
+}
+
+.team-block.team-has-subparties {
+  padding: 12px 14px;
+}
+
+.sub-party {
+  background: rgba(0, 0, 0, 0.25);
+  border-radius: 6px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+}
+
+.sub-party h6 {
+  margin: 0 0 6px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-muted);
 }
 
 .team-slot {

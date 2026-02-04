@@ -15,6 +15,8 @@
   };
   const VOC_SHORT = { 'Elite Knight': 'EK', 'Elder Druid': 'ED', 'Master Sorcerer': 'MS', 'Royal Paladin': 'RP', 'Exalted Monk': 'EM' };
   const VOC_ORDER = { 'Elite Knight': 0, 'Elder Druid': 1, 'Master Sorcerer': 2, 'Royal Paladin': 3, 'Exalted Monk': 4 };
+  const HOD_SUB_LABELS = ['Left', 'Middle', 'Right'];
+  const LLK_SUB_LABELS = ['Top Left', 'Top Right', 'Bottom Left', 'Bottom Right'];
   function sortByVocation(players) {
     return players.slice().sort((a, b) => (VOC_ORDER[a.vocation] !== undefined ? VOC_ORDER[a.vocation] : 99) - (VOC_ORDER[b.vocation] !== undefined ? VOC_ORDER[b.vocation] : 99) || (a.name || '').toLowerCase().localeCompare((b.name || '').toLowerCase()));
   }
@@ -214,7 +216,15 @@
         if (subParties[idx].length >= subPartySize) break;
         subParties[idx].push(remaining[ri]); assigned.add(remaining[ri].userId); ri++;
       }
-      return subParties.every(s => s.length <= subPartySize) ? subParties : null;
+      if (subParties.every(s => s.length <= subPartySize)) return subParties;
+      const sorted = team.slice().sort((a, b) => (a.priority - b.priority) || (a.name.toLowerCase().localeCompare(b.name.toLowerCase())));
+      const fallback = [[], [], []];
+      let idx = 0;
+      sorted.forEach(p => {
+        const i = fallback.findIndex(s => s.length < subPartySize);
+        if (i !== -1) fallback[i].push(p);
+      });
+      return fallback;
     }
     if (code === 'L') {
       const targetSizes = [4, 4, 4, 3];
@@ -244,7 +254,7 @@
     const subParties = needsSplit ? splitIntoSubParties(teamPlayers, code) : null;
 
     if (subParties && subParties.length) {
-      const subLabels = code === 'H' ? ['Left', 'Mid', 'Right'] : ['Top Left', 'Top Right', 'Bottom Left', 'Bottom Right'];
+      const subLabels = code === 'H' ? HOD_SUB_LABELS : LLK_SUB_LABELS;
       lines.push('**' + bossName + ' — Team ' + teamNumber + ' (' + teamPlayers.length + '/' + teamSize + ')**', '');
       if (item.meetsRequirements === false) lines.push('⚠ Does not meet minimum requirements.', '');
       subParties.forEach((sub, i) => {
@@ -270,15 +280,27 @@
     return lines.join('\n');
   }
 
+  function getBackupsForLastTeam(generated, item) {
+    const itemsForCode = generated.filter(g => g.code === item.code);
+    const emptySlot = itemsForCode[itemsForCode.length - 1];
+    const nonEmpty = itemsForCode.filter(g => g.team && g.team.length > 0);
+    const isLastNonEmpty = nonEmpty.length && nonEmpty[nonEmpty.length - 1] === item;
+    return isLastNonEmpty && emptySlot && emptySlot.backups ? emptySlot.backups : (item.backups || []);
+  }
+
   function formatTeamsForDiscord(generated, bossNames, skipEmpty) {
     const items = skipEmpty ? generated.filter(item => item.team && item.team.length > 0) : generated;
-    return items.map(item => formatOneTeamForDiscord(item, bossNames)).join('\n');
+    return items.map(item => {
+      const withBackups = Object.assign({}, item, { backups: getBackupsForLastTeam(generated, item) });
+      return formatOneTeamForDiscord(withBackups, bossNames);
+    }).join('\n');
   }
 
   function getPerTeamCopyChunks(generated, bossNames) {
     return generated.filter(item => item.team && item.team.length > 0).map(item => {
       const bossName = (bossNames && bossNames[item.code]) || item.code;
-      return { label: bossName + ' Team ' + item.teamNumber, text: formatOneTeamForDiscord(item, bossNames) };
+      const withBackups = Object.assign({}, item, { backups: getBackupsForLastTeam(generated, item) });
+      return { label: bossName + ' Team ' + item.teamNumber, text: formatOneTeamForDiscord(withBackups, bossNames) };
     });
   }
 
@@ -309,16 +331,56 @@
           meetsRequirements = false;
         }
         if (!team.length) break;
-        generated.push({ code, teamNumber: n + 1, team, teamSize, backups: [], meetsRequirements });
+        const item = { code, teamNumber: n + 1, team, teamSize, backups: [], meetsRequirements };
+        if ((code === 'H' || code === 'L') && team.length) {
+          const sub = splitIntoSubParties(team, code);
+          if (sub) item.subParties = sub;
+        }
+        generated.push(item);
         const used = new Set(team.map(p => p.userId));
         remaining = remaining.filter(p => !used.has(p.userId));
       }
-      if (remaining.length && generated.length && generated[generated.length - 1].code === code)
-        generated[generated.length - 1].backups = remaining;
       const numTeamsForCode = generated.filter(g => g.code === code).length;
-      generated.push({ code, teamNumber: numTeamsForCode + 1, team: [], teamSize, backups: [], meetsRequirements: true });
+      const emptySlot = { code, teamNumber: numTeamsForCode + 1, team: [], teamSize, backups: remaining.length ? remaining : [], meetsRequirements: true };
+      generated.push(emptySlot);
     }
-    return generated;
+    return mergeUnderfilledTeams(generated);
+  }
+
+  function mergeUnderfilledTeams(generated) {
+    const result = [];
+    let i = 0;
+    while (i < generated.length) {
+      const code = generated[i].code;
+      const itemsForCode = generated.filter(g => g.code === code);
+      const filled = itemsForCode.filter(g => g.team && g.team.length > 0);
+      const teamSize = itemsForCode[0].teamSize || BOSS_TEAM_SIZES[code] || 10;
+      const mergeThreshold = Math.ceil(teamSize / 2);
+      const shouldMerge = filled.length >= 2 && Math.min(...filled.map(g => g.team.length)) < mergeThreshold;
+      if (shouldMerge) {
+        const first = Object.assign({}, itemsForCode[0]);
+        const allPlayers = [];
+        itemsForCode.forEach(g => {
+          if (g.team && g.team.length) allPlayers.push(...g.team);
+          if (g.backups && g.backups.length) allPlayers.push(...g.backups);
+        });
+        allPlayers.sort((a, b) => (a.priority - b.priority) || (a.vocationPriorityRank - b.vocationPriorityRank) || (a.name.toLowerCase().localeCompare(b.name.toLowerCase())));
+        first.team = allPlayers.slice(0, teamSize);
+        first.backups = allPlayers.slice(teamSize);
+        first.teamNumber = 1;
+        if ((code === 'H' || code === 'L') && first.team.length) {
+          const sub = splitIntoSubParties(first.team, code);
+          if (sub) first.subParties = sub;
+        }
+        result.push(first);
+        result.push({ code, teamNumber: 2, team: [], teamSize, backups: [], meetsRequirements: true });
+        i += itemsForCode.length;
+      } else {
+        result.push(generated[i]);
+        i++;
+      }
+    }
+    return result;
   }
 
   let state = { members: [], generated: null };
@@ -408,10 +470,15 @@
       bossDiv.className = 'boss-block';
       bossDiv.dataset.code = code;
       bossDiv.innerHTML = '<h4>' + escapeHtml(bossName) + '</h4>';
+      const teamsWrap = document.createElement('div');
+      teamsWrap.className = 'boss-teams-wrap';
       byCode[code].forEach((item, teamIdx) => {
         const teamDiv = document.createElement('div');
         const isIncomplete = item.team.length > 0 && item.meetsRequirements === false;
-        teamDiv.className = 'team-block' + (item.team.length === 0 ? ' empty-team' : '') + (isIncomplete ? ' team-incomplete' : '');
+        const isHoDOrLLK = (code === 'H' || code === 'L');
+        const subParties = isHoDOrLLK ? (item.subParties || splitIntoSubParties(item.team, code) || (code === 'H' ? [[], [], []] : [[], [], [], []])) : null;
+        const useSubPartyLayout = isHoDOrLLK && subParties && subParties.length;
+        teamDiv.className = 'team-block' + (item.team.length === 0 ? ' empty-team' : '') + (isIncomplete ? ' team-incomplete' : '') + (useSubPartyLayout ? ' team-has-subparties' : '');
         teamDiv.dataset.code = code;
         teamDiv.dataset.teamIndex = String(teamIdx);
         const teamTitle = document.createElement('h5');
@@ -428,23 +495,88 @@
           teamTitle.insertBefore(warn, teamTitle.firstChild);
         }
         teamDiv.appendChild(teamTitle);
-        const ul = document.createElement('ul');
-        ul.className = 'team-slot' + (item.team.length === 0 ? ' placeholder-empty' : '');
-        sortByVocation(item.team).forEach((p) => {
-          const li = document.createElement('li');
-          li.draggable = true;
-          li.dataset.userId = String(p.userId);
-          li.dataset.vocation = p.vocation;
-          li.dataset.name = p.name;
-          li.dataset.roles = (p.roles || []).join(',');
-          li.dataset.priority = String(p.priority);
-          li.dataset.vocationPriorityRank = String(p.vocationPriorityRank);
-          li.innerHTML = '<span>' + escapeHtml(p.name) + ' <span class="voc">(' + (VOC_SHORT[p.vocation] || p.vocation) + ')</span></span>' + (p.roles && p.roles.length ? '<span class="roles">' + escapeHtml(p.roles.join(', ')) + '</span>' : '');
-          ul.appendChild(li);
-        });
-        teamDiv.appendChild(ul);
-        bossDiv.appendChild(teamDiv);
+
+        if (useSubPartyLayout) {
+          const labels = code === 'H' ? HOD_SUB_LABELS : LLK_SUB_LABELS;
+          const subpartiesWrap = document.createElement('div');
+          subpartiesWrap.className = 'team-subparties team-subparties-' + (code === 'H' ? 'hod' : 'llk');
+          subParties.forEach((sub, i) => {
+            const subBox = document.createElement('div');
+            subBox.className = 'sub-party';
+            subBox.dataset.subIndex = String(i);
+            const subTitle = document.createElement('h6');
+            subTitle.textContent = labels[i];
+            subBox.appendChild(subTitle);
+            const ul = document.createElement('ul');
+            ul.className = 'team-slot' + (sub.length === 0 ? ' placeholder-empty' : '');
+            sortByVocation(sub).forEach((p) => {
+              const li = document.createElement('li');
+              li.draggable = true;
+              li.dataset.userId = String(p.userId);
+              li.dataset.vocation = p.vocation;
+              li.dataset.name = p.name;
+              li.dataset.roles = (p.roles || []).join(',');
+              li.dataset.priority = String(p.priority);
+              li.dataset.vocationPriorityRank = String(p.vocationPriorityRank);
+              li.innerHTML = '<span>' + escapeHtml(p.name) + ' <span class="voc">(' + (VOC_SHORT[p.vocation] || p.vocation) + ')</span></span>' + (p.roles && p.roles.length ? '<span class="roles">' + escapeHtml(p.roles.join(', ')) + '</span>' : '');
+              ul.appendChild(li);
+            });
+            subBox.appendChild(ul);
+            subpartiesWrap.appendChild(subBox);
+          });
+          teamDiv.appendChild(subpartiesWrap);
+        } else {
+          const ul = document.createElement('ul');
+          ul.className = 'team-slot' + (item.team.length === 0 ? ' placeholder-empty' : '');
+          sortByVocation(item.team).forEach((p) => {
+            const li = document.createElement('li');
+            li.draggable = true;
+            li.dataset.userId = String(p.userId);
+            li.dataset.vocation = p.vocation;
+            li.dataset.name = p.name;
+            li.dataset.roles = (p.roles || []).join(',');
+            li.dataset.priority = String(p.priority);
+            li.dataset.vocationPriorityRank = String(p.vocationPriorityRank);
+            li.innerHTML = '<span>' + escapeHtml(p.name) + ' <span class="voc">(' + (VOC_SHORT[p.vocation] || p.vocation) + ')</span></span>' + (p.roles && p.roles.length ? '<span class="roles">' + escapeHtml(p.roles.join(', ')) + '</span>' : '');
+            ul.appendChild(li);
+          });
+          teamDiv.appendChild(ul);
+        }
+        teamsWrap.appendChild(teamDiv);
       });
+      const itemsForCode = byCode[code];
+      const lastItem = itemsForCode[itemsForCode.length - 1];
+      const nonEmptyForCode = itemsForCode.filter(g => g.team && g.team.length > 0);
+      const lastNonEmpty = nonEmptyForCode.length ? nonEmptyForCode[nonEmptyForCode.length - 1] : null;
+      const backupPlayers = (lastItem && lastItem.backups && lastItem.backups.length)
+        ? lastItem.backups.slice()
+        : (lastNonEmpty && lastNonEmpty.backups) ? lastNonEmpty.backups.slice() : [];
+      const backupBox = document.createElement('div');
+      backupBox.className = 'backup-box';
+      backupBox.dataset.code = code;
+      const backupTitle = document.createElement('h5');
+      backupTitle.textContent = 'Back-up / Reserves';
+      backupBox.appendChild(backupTitle);
+      const backupUl = document.createElement('ul');
+      backupUl.className = 'backup-slot' + (backupPlayers.length === 0 ? ' placeholder-empty' : '');
+      sortByVocation(backupPlayers).forEach((p) => {
+        const li = document.createElement('li');
+        li.draggable = true;
+        li.dataset.userId = String(p.userId);
+        li.dataset.vocation = p.vocation;
+        li.dataset.name = p.name;
+        li.dataset.roles = (p.roles || []).join(',');
+        li.dataset.priority = String(p.priority);
+        li.dataset.vocationPriorityRank = String(p.vocationPriorityRank);
+        li.innerHTML = '<span>' + escapeHtml(p.name) + ' <span class="voc">(' + (VOC_SHORT[p.vocation] || p.vocation) + ')</span></span>' + (p.roles && p.roles.length ? '<span class="roles">' + escapeHtml(p.roles.join(', ')) + '</span>' : '');
+        backupUl.appendChild(li);
+      });
+      backupBox.appendChild(backupUl);
+      const teamsAndBackup = document.createElement('div');
+      teamsAndBackup.className = 'boss-teams-and-backup';
+      teamsAndBackup.appendChild(teamsWrap);
+      teamsAndBackup.appendChild(backupBox);
+      bossDiv.appendChild(teamsAndBackup);
       preview.appendChild(bossDiv);
     });
 
@@ -491,8 +623,8 @@
 
   function setupDragDrop(previewEl) {
     let dragged = null;
-    const allLis = previewEl.querySelectorAll('.team-slot li');
-    const allUls = previewEl.querySelectorAll('.team-slot');
+    const allLis = previewEl.querySelectorAll('.team-slot li, .backup-slot li');
+    const allUls = previewEl.querySelectorAll('.team-slot, .backup-slot');
 
     function addListeners(li) {
       li.addEventListener('dragstart', function (e) {
@@ -582,6 +714,7 @@
         this.appendChild(li);
         addListeners(li);
         if (dragged.parentUl.querySelectorAll('li').length === 0) dragged.parentUl.classList.add('placeholder-empty');
+        if (dragged.parentUl.classList.contains('backup-slot') && dragged.parentUl.querySelectorAll('li').length === 0) dragged.parentUl.classList.add('placeholder-empty');
         syncGeneratedFromPreview();
       });
     });
@@ -624,14 +757,42 @@
       bossBlock.querySelectorAll('.team-block').forEach((teamDiv, teamIdx) => {
         const item = items[teamIdx];
         if (!item) return;
-        const ul = teamDiv.querySelector('.team-slot');
-        if (!ul) return;
-        const newTeam = [];
-        ul.querySelectorAll('li').forEach(li => newTeam.push(playerFromLi(li)));
-        const sorted = sortByVocation(newTeam);
-        item.team = sorted;
-        reorderUlByVocation(ul, sorted);
+        const subpartiesWrap = teamDiv.querySelector('.team-subparties');
+        if (subpartiesWrap && (code === 'H' || code === 'L')) {
+          const subParties = [];
+          subpartiesWrap.querySelectorAll('.sub-party').forEach(subBox => {
+            const ul = subBox.querySelector('.team-slot');
+            if (!ul) return;
+            const players = [];
+            ul.querySelectorAll('li').forEach(li => players.push(playerFromLi(li)));
+            const sorted = sortByVocation(players);
+            subParties.push(sorted);
+            reorderUlByVocation(ul, sorted);
+          });
+          item.subParties = subParties;
+          item.team = subParties.flat();
+        } else {
+          const ul = teamDiv.querySelector('.team-slot');
+          if (!ul) return;
+          const newTeam = [];
+          ul.querySelectorAll('li').forEach(li => newTeam.push(playerFromLi(li)));
+          const sorted = sortByVocation(newTeam);
+          item.team = sorted;
+          if ((code === 'H' || code === 'L') && sorted.length) {
+            const sub = splitIntoSubParties(sorted, code);
+            if (sub) item.subParties = sub;
+          }
+          reorderUlByVocation(ul, sorted);
+        }
       });
+      const backupBox = bossBlock.querySelector('.backup-box');
+      const backupUl = backupBox && backupBox.querySelector('.backup-slot');
+      const lastItem = items[items.length - 1];
+      if (backupUl && lastItem) {
+        const backupPlayers = [];
+        backupUl.querySelectorAll('li').forEach(li => backupPlayers.push(playerFromLi(li)));
+        lastItem.backups = sortByVocation(backupPlayers);
+      }
     });
     const output = document.getElementById('output-text');
     if (output) output.value = formatTeamsForDiscord(state.generated, BOSS_NAMES, true);
