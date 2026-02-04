@@ -25,14 +25,14 @@ body {
 }
 
 .app {
-  max-width: 900px;
+  max-width: 1200px;
   margin: 0 auto;
   padding: 24px 20px;
 }
 
 .header {
   text-align: center;
-  margin-bottom: 32px;
+  margin-bottom: 24px;
 }
 
 .header h1 {
@@ -46,28 +46,55 @@ body {
   font-size: 1rem;
 }
 
+.main-layout {
+  display: grid;
+  grid-template-columns: 300px 1fr;
+  gap: 24px;
+  align-items: start;
+}
+
+@media (max-width: 800px) {
+  .main-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+.sidebar {
+  position: sticky;
+  top: 24px;
+}
+
+.sidebar-characters .sidebar-list {
+  max-height: 50vh;
+  overflow-y: auto;
+}
+
+.content {
+  min-width: 0;
+}
+
 .card {
   background: var(--bg-card);
   border-radius: var(--radius);
-  padding: 24px;
-  margin-bottom: 24px;
+  padding: 20px;
+  margin-bottom: 20px;
   border: 1px solid var(--border);
 }
 
 .card h2 {
-  margin: 0 0 12px;
-  font-size: 1.25rem;
+  margin: 0 0 10px;
+  font-size: 1.15rem;
 }
 
 .card h3 {
-  margin: 16px 0 8px;
+  margin: 12px 0 6px;
   font-size: 1rem;
 }
 
 .hint {
   color: var(--text-muted);
-  font-size: 0.9rem;
-  margin: 0 0 12px;
+  font-size: 0.85rem;
+  margin: 0 0 10px;
 }
 
 .hint code {
@@ -79,8 +106,8 @@ body {
 
 .import-textarea {
   width: 100%;
-  min-height: 140px;
-  padding: 12px;
+  min-height: 120px;
+  padding: 10px;
   border-radius: 8px;
   border: 1px solid var(--border);
   background: rgba(0, 0, 0, 0.2);
@@ -88,7 +115,7 @@ body {
   font-family: inherit;
   font-size: 0.9rem;
   resize: vertical;
-  margin-bottom: 12px;
+  margin-bottom: 10px;
 }
 
 .import-textarea::placeholder {
@@ -98,18 +125,18 @@ body {
 .row {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   flex-wrap: wrap;
 }
 
 .row.actions {
-  margin-bottom: 16px;
+  margin-bottom: 12px;
 }
 
 .btn {
-  padding: 10px 18px;
+  padding: 8px 16px;
   border-radius: 8px;
-  font-size: 0.95rem;
+  font-size: 0.9rem;
   font-weight: 600;
   cursor: pointer;
   border: none;
@@ -136,8 +163,8 @@ body {
 
 .input-codes {
   flex: 1;
-  min-width: 200px;
-  padding: 10px 12px;
+  min-width: 180px;
+  padding: 8px 12px;
   border-radius: 8px;
   border: 1px solid var(--border);
   background: rgba(0, 0, 0, 0.2);
@@ -146,7 +173,7 @@ body {
 }
 
 .status {
-  font-size: 0.9rem;
+  font-size: 0.85rem;
   color: var(--text-muted);
 }
 
@@ -162,113 +189,92 @@ body {
   display: none !important;
 }
 
-.players-list {
-  margin-top: 20px;
-  padding-top: 20px;
-  border-top: 1px solid var(--border);
+/* Sidebar character list */
+.sidebar-characters.hidden {
+  display: none !important;
 }
 
-.player-block {
+.character-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  margin-bottom: 6px;
   background: rgba(0, 0, 0, 0.2);
-  border-radius: 8px;
-  padding: 12px 14px;
-  margin-bottom: 10px;
+  border-radius: 6px;
   border: 1px solid var(--border);
 }
 
-.player-block .name {
+.character-row .char-name {
+  flex: 1;
   font-weight: 600;
-  margin-bottom: 6px;
-}
-
-.player-block .signups {
   font-size: 0.9rem;
-  color: var(--text-muted);
-  margin-bottom: 8px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.player-block .signups span {
-  margin-right: 8px;
-}
-
-.player-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  align-items: center;
-  font-size: 0.85rem;
-}
-
-.player-block .player-actions+.player-actions {
-  margin-top: 6px;
-}
-
-.player-actions label {
-  color: var(--text-muted);
-}
-
-.player-actions select {
-  padding: 4px 8px;
+.character-row .char-priority {
+  width: 48px;
+  padding: 4px 6px;
   border-radius: 4px;
   border: 1px solid var(--border);
   background: var(--bg);
   color: var(--text);
+  font-size: 0.85rem;
+  text-align: center;
 }
 
-.role-tag {
-  display: inline-block;
-  background: var(--accent);
-  color: #fff;
-  padding: 2px 8px;
-  border-radius: 4px;
-  font-size: 0.8rem;
-  margin-right: 4px;
-  margin-top: 4px;
+.character-row .char-signups {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-top: 2px;
 }
 
-.role-tag .remove-role {
-  margin-left: 4px;
-  cursor: pointer;
-  opacity: 0.9;
-}
-
-/* Teams preview (drag & drop) */
+/* Teams preview */
 .teams-preview {
-  margin-bottom: 20px;
+  margin-bottom: 16px;
 }
 
 .boss-block {
-  margin-bottom: 24px;
+  margin-bottom: 20px;
 }
 
 .boss-block h4 {
-  margin: 0 0 12px;
-  font-size: 1.1rem;
+  margin: 0 0 10px;
+  font-size: 1.05rem;
   color: var(--accent);
 }
 
 .team-block {
   background: rgba(0, 0, 0, 0.2);
   border-radius: 8px;
-  padding: 12px;
-  margin-bottom: 12px;
+  padding: 10px 12px;
+  margin-bottom: 10px;
   border: 1px solid var(--border);
+  min-height: 44px;
 }
 
 .team-block h5 {
-  margin: 0 0 10px;
-  font-size: 0.95rem;
+  margin: 0 0 8px;
+  font-size: 0.9rem;
   color: var(--text-muted);
+}
+
+.team-block.empty-team {
+  border-style: dashed;
+  opacity: 0.85;
 }
 
 .team-slot {
   list-style: none;
   margin: 0;
   padding: 0;
+  min-height: 24px;
 }
 
 .team-slot li {
-  padding: 8px 10px;
+  padding: 6px 10px;
   margin-bottom: 4px;
   background: var(--bg);
   border-radius: 6px;
@@ -284,61 +290,62 @@ body {
 }
 
 .team-slot li.dragging {
-  opacity: 0.6;
+  opacity: 0.5;
 }
 
 .team-slot li.drag-over {
   border-color: var(--success);
-  background: rgba(74, 222, 128, 0.1);
+  background: rgba(74, 222, 128, 0.12);
 }
 
 .team-slot .voc {
-  font-size: 0.8rem;
+  font-size: 0.78rem;
   color: var(--text-muted);
-  margin-left: 8px;
+  margin-left: 6px;
 }
 
 .team-slot .roles {
-  font-size: 0.75rem;
+  font-size: 0.72rem;
   color: var(--accent);
 }
 
-.sub-party {
-  margin-left: 12px;
-  margin-bottom: 10px;
+.team-slot.placeholder-empty {
+  padding: 10px;
+  min-height: 40px;
 }
 
-.sub-party .sub-label {
-  font-size: 0.85rem;
+.team-slot.placeholder-empty::after {
+  content: 'Drop players here';
+  display: block;
   color: var(--text-muted);
-  margin-bottom: 6px;
+  font-size: 0.85rem;
 }
 
 .output-section {
-  margin-top: 20px;
+  margin-top: 16px;
 }
 
 .output-section label {
   display: block;
   margin-bottom: 6px;
-  font-size: 0.9rem;
+  font-size: 0.85rem;
   color: var(--text-muted);
 }
 
 .output-textarea {
   width: 100%;
-  min-height: 200px;
-  padding: 12px;
+  min-height: 180px;
+  padding: 10px;
   border-radius: 8px;
   border: 1px solid var(--border);
   background: rgba(0, 0, 0, 0.3);
   color: var(--text);
   font-family: 'Consolas', 'Monaco', monospace;
-  font-size: 0.85rem;
+  font-size: 0.82rem;
   resize: vertical;
 }
 
 #players-container {
-  max-height: 400px;
+  max-height: 360px;
   overflow-y: auto;
 }
