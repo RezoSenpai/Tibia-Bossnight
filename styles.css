@@ -104,6 +104,38 @@ body {
   font-size: 0.85em;
 }
 
+.info-box {
+  border-left: 4px solid var(--accent);
+}
+
+.info-box h3 {
+  margin: 12px 0 6px;
+  font-size: 0.95rem;
+}
+
+.info-box p {
+  margin: 0 0 8px;
+  font-size: 0.9rem;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.info-box p strong {
+  color: var(--text);
+}
+
+.requirements-list {
+  margin: 0 0 10px;
+  padding-left: 20px;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.requirements-list li {
+  margin-bottom: 4px;
+}
+
 .import-textarea {
   width: 100%;
   min-height: 120px;
@@ -264,6 +296,16 @@ body {
 .team-block.empty-team {
   border-style: dashed;
   opacity: 0.85;
+}
+
+.team-block.team-incomplete {
+  border-color: var(--warning, #f59e0b);
+  background: rgba(245, 158, 11, 0.08);
+}
+
+.team-warning-icon {
+  font-size: 1.1rem;
+  line-height: 1;
 }
 
 .team-slot {

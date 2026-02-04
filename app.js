@@ -160,6 +160,22 @@
     return team;
   }
 
+  /** Build a best-effort team from pool when full requirements can't be met. Uses priority order. */
+  function generateTeamPartial(players, teamSize, bossCode) {
+    const pool = players.slice();
+    if (!pool.length) return [];
+    pool.sort((a, b) => (a.priority - b.priority) || (a.vocationPriorityRank - b.vocationPriorityRank) || (a.name.toLowerCase().localeCompare(b.name.toLowerCase())));
+    const team = [];
+    const seen = new Set();
+    for (const p of pool) {
+      if (seen.has(p.userId)) continue;
+      seen.add(p.userId);
+      team.push(p);
+      if (team.length >= teamSize) break;
+    }
+    return team;
+  }
+
   function splitIntoSubParties(team, code) {
     if (code === 'H') {
       const subPartySize = 5;
@@ -230,6 +246,7 @@
     if (subParties && subParties.length) {
       const subLabels = code === 'H' ? ['Left', 'Mid', 'Right'] : ['Top Left', 'Top Right', 'Bottom Left', 'Bottom Right'];
       lines.push('**' + bossName + ' — Team ' + teamNumber + ' (' + teamPlayers.length + '/' + teamSize + ')**', '');
+      if (item.meetsRequirements === false) lines.push('⚠ Does not meet minimum requirements.', '');
       subParties.forEach((sub, i) => {
         const vocCounts = sub.reduce((acc, p) => { acc[p.vocation] = (acc[p.vocation] || 0) + 1; return acc; }, {});
         const comp = Object.entries(vocCounts).map(([v, c]) => v + ': ' + c).sort().join(', ');
@@ -241,6 +258,7 @@
       const vocCounts = sorted.reduce((acc, p) => { acc[p.vocation] = (acc[p.vocation] || 0) + 1; return acc; }, {});
       const comp = Object.entries(vocCounts).map(([v, c]) => v + ': ' + c).sort().join(', ');
       lines.push('**' + bossName + ' — Team ' + teamNumber + ' (' + teamPlayers.length + '/' + teamSize + ')** — ' + comp, '');
+      if (item.meetsRequirements === false) lines.push('⚠ Does not meet minimum requirements.', '');
       sorted.forEach(p => lines.push(formatPlayerLine(p)));
       lines.push('');
     }
@@ -284,16 +302,21 @@
       let remaining = players.slice();
 
       for (let n = 0; n < count; n++) {
-        const team = generateTeam(remaining, minMax, teamSize, code);
-        if (!team) break;
-        generated.push({ code, teamNumber: n + 1, team, teamSize, backups: [] });
+        let team = generateTeam(remaining, minMax, teamSize, code);
+        let meetsRequirements = true;
+        if (!team) {
+          team = generateTeamPartial(remaining, teamSize, code);
+          meetsRequirements = false;
+        }
+        if (!team.length) break;
+        generated.push({ code, teamNumber: n + 1, team, teamSize, backups: [], meetsRequirements });
         const used = new Set(team.map(p => p.userId));
         remaining = remaining.filter(p => !used.has(p.userId));
       }
       if (remaining.length && generated.length && generated[generated.length - 1].code === code)
         generated[generated.length - 1].backups = remaining;
       const numTeamsForCode = generated.filter(g => g.code === code).length;
-      generated.push({ code, teamNumber: numTeamsForCode + 1, team: [], teamSize, backups: [] });
+      generated.push({ code, teamNumber: numTeamsForCode + 1, team: [], teamSize, backups: [], meetsRequirements: true });
     }
     return generated;
   }
@@ -387,11 +410,23 @@
       bossDiv.innerHTML = '<h4>' + escapeHtml(bossName) + '</h4>';
       byCode[code].forEach((item, teamIdx) => {
         const teamDiv = document.createElement('div');
-        teamDiv.className = 'team-block' + (item.team.length === 0 ? ' empty-team' : '');
+        const isIncomplete = item.team.length > 0 && item.meetsRequirements === false;
+        teamDiv.className = 'team-block' + (item.team.length === 0 ? ' empty-team' : '') + (isIncomplete ? ' team-incomplete' : '');
         teamDiv.dataset.code = code;
         teamDiv.dataset.teamIndex = String(teamIdx);
         const teamTitle = document.createElement('h5');
+        teamTitle.style.display = 'flex';
+        teamTitle.style.alignItems = 'center';
+        teamTitle.style.gap = '8px';
         teamTitle.textContent = bossName + ' Team ' + item.teamNumber;
+        if (isIncomplete) {
+          const warn = document.createElement('span');
+          warn.className = 'team-warning-icon';
+          warn.title = 'This team does not meet the minimum vocation/size requirements. You can still use it if you want.';
+          warn.setAttribute('aria-label', 'Does not meet minimum requirements');
+          warn.textContent = '\u26A0\uFE0F';
+          teamTitle.insertBefore(warn, teamTitle.firstChild);
+        }
         teamDiv.appendChild(teamTitle);
         const ul = document.createElement('ul');
         ul.className = 'team-slot' + (item.team.length === 0 ? ' placeholder-empty' : '');
