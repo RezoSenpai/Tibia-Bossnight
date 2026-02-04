@@ -21,6 +21,16 @@
     return players.slice().sort((a, b) => (VOC_ORDER[a.vocation] !== undefined ? VOC_ORDER[a.vocation] : 99) - (VOC_ORDER[b.vocation] !== undefined ? VOC_ORDER[b.vocation] : 99) || (a.name || '').toLowerCase().localeCompare((b.name || '').toLowerCase()));
   }
 
+  /** Returns { total, summary } e.g. { total: 9, summary: '9 Players   3 EK 3 ED 2 MS 1 RP' } */
+  function getVocationCounts(team) {
+    if (!team || !team.length) return { total: 0, summary: '0 Players' };
+    const counts = {};
+    team.forEach(p => { counts[p.vocation] = (counts[p.vocation] || 0) + 1; });
+    const order = ['Elite Knight', 'Elder Druid', 'Master Sorcerer', 'Royal Paladin', 'Exalted Monk'];
+    const parts = order.filter(v => (counts[v] || 0) > 0).map(v => (counts[v] || 0) + ' ' + (VOC_SHORT[v] || v));
+    return { total: team.length, summary: team.length + ' Players   ' + parts.join(' ') };
+  }
+
   function getBossRequirements(code) {
     code = code.toUpperCase();
     const reqs = {
@@ -106,6 +116,32 @@
     return players;
   }
 
+  function slotKey(p) { return p.userId + '|' + (p.vocation || ''); }
+
+  function teamMeetsRequirements(team, code, teamSize) {
+    if (!team || !team.length) return false;
+    const minMax = getBossRequirements(code);
+    const counts = {};
+    Object.keys(minMax).forEach(v => { counts[v] = 0; });
+    team.forEach(p => { if (minMax[p.vocation] !== undefined) counts[p.vocation] = (counts[p.vocation] || 0) + 1; });
+    const ekCount = counts['Elite Knight'] || 0, edCount = counts['Elder Druid'] || 0;
+    const msCount = counts['Master Sorcerer'] || 0, rpCount = counts['Royal Paladin'] || 0;
+    const shooterCount = msCount + rpCount;
+    if (code === 'Z' && ekCount === 3) {
+      if (edCount < 3 || rpCount < 1) return false;
+    }
+    if (code === 'P' && shooterCount < 2) return false;
+    if (code === 'F' && (msCount < 1 || shooterCount < 3)) return false;
+    if (code === 'H' && (msCount < 1 || shooterCount < 5)) return false;
+    if (code === 'L' && (msCount < 1 || shooterCount < 5)) return false;
+    if (code === 'C' && shooterCount < 2) return false;
+    for (const [v, [vMin, vMax]] of Object.entries(minMax)) {
+      const c = counts[v] || 0;
+      if (c < vMin || c > vMax) return false;
+    }
+    return team.length <= teamSize;
+  }
+
   function generateTeam(players, minMax, teamSize, bossCode) {
     const pool = players.slice();
     if (!pool.length) return null;
@@ -113,6 +149,9 @@
 
     const byVocation = {};
     pool.forEach(p => { if (!byVocation[p.vocation]) byVocation[p.vocation] = []; byVocation[p.vocation].push(p); });
+    Object.keys(byVocation).forEach(voc => {
+      byVocation[voc].sort((a, b) => (a.vocationPriorityRank - b.vocationPriorityRank) || (a.priority - b.priority) || (a.name || '').toLowerCase().localeCompare((b.name || '').toLowerCase()));
+    });
 
     const team = [];
     const selectedIds = new Set();
@@ -162,18 +201,44 @@
     return team;
   }
 
-  /** Build a best-effort team from pool when full requirements can't be met. Uses priority order. */
-  function generateTeamPartial(players, teamSize, bossCode) {
+  /** Build a best-effort team from pool when full requirements can't be met. Fills minimums first, then by priority; respects vocation min/max when minMax provided. */
+  function generateTeamPartial(players, teamSize, bossCode, minMax) {
     const pool = players.slice();
     if (!pool.length) return [];
     pool.sort((a, b) => (a.priority - b.priority) || (a.vocationPriorityRank - b.vocationPriorityRank) || (a.name.toLowerCase().localeCompare(b.name.toLowerCase())));
+    const byVocation = {};
+    pool.forEach(p => { if (!byVocation[p.vocation]) byVocation[p.vocation] = []; byVocation[p.vocation].push(p); });
+    Object.keys(byVocation).forEach(voc => {
+      byVocation[voc].sort((a, b) => (a.vocationPriorityRank - b.vocationPriorityRank) || (a.priority - b.priority) || (a.name || '').toLowerCase().localeCompare((b.name || '').toLowerCase()));
+    });
     const team = [];
-    const seen = new Set();
+    const selectedIds = new Set();
+    const counts = {};
+    if (minMax) Object.keys(minMax).forEach(v => { counts[v] = 0; });
+
+    if (minMax) {
+      for (const [vocation, [vMin]] of Object.entries(minMax)) {
+        if (vMin <= 0) continue;
+        const candidates = (byVocation[vocation] || []).filter(p => !selectedIds.has(p.userId));
+        const take = Math.min(vMin, candidates.length);
+        for (let i = 0; i < take; i++) {
+          team.push(candidates[i]);
+          selectedIds.add(candidates[i].userId);
+          counts[vocation] = (counts[vocation] || 0) + 1;
+        }
+      }
+    }
+
     for (const p of pool) {
-      if (seen.has(p.userId)) continue;
-      seen.add(p.userId);
-      team.push(p);
       if (team.length >= teamSize) break;
+      if (selectedIds.has(p.userId)) continue;
+      if (minMax && minMax[p.vocation]) {
+        const vMax = minMax[p.vocation][1];
+        if ((counts[p.vocation] || 0) >= vMax) continue;
+      }
+      selectedIds.add(p.userId);
+      team.push(p);
+      if (minMax && minMax[p.vocation]) counts[p.vocation] = (counts[p.vocation] || 0) + 1;
     }
     return team;
   }
@@ -239,9 +304,11 @@
     return null;
   }
 
-  function formatPlayerLine(p, indent) {
+  function formatPlayerLine(p, indent, extraRoles) {
     const levelStr = p.level ? ' Lvl ' + p.level : '';
-    const rolesStr = p.roles && p.roles.length ? ' [' + p.roles.join(', ') + ']' : '';
+    const roles = [...(p.roles || [])];
+    if (extraRoles && extraRoles.length) roles.push(...extraRoles);
+    const rolesStr = roles.length ? ' [' + roles.join(', ') + ']' : '';
     return (indent || '') + p.name + ' (' + p.vocation + ')' + levelStr + rolesStr;
   }
 
@@ -253,23 +320,20 @@
     const needsSplit = code === 'H' || code === 'L';
     const subParties = needsSplit ? splitIntoSubParties(teamPlayers, code) : null;
 
+    const teamCounter = getVocationCounts(teamPlayers).summary;
     if (subParties && subParties.length) {
       const subLabels = code === 'H' ? HOD_SUB_LABELS : LLK_SUB_LABELS;
-      lines.push('**' + bossName + ' — Team ' + teamNumber + ' (' + teamPlayers.length + '/' + teamSize + ')**', '');
-      if (item.meetsRequirements === false) lines.push('⚠ Does not meet minimum requirements.', '');
+      lines.push('**' + bossName + ' — Team ' + teamNumber + ' (' + teamPlayers.length + '/' + teamSize + ')** — ' + teamCounter, '');
       subParties.forEach((sub, i) => {
-        const vocCounts = sub.reduce((acc, p) => { acc[p.vocation] = (acc[p.vocation] || 0) + 1; return acc; }, {});
-        const comp = Object.entries(vocCounts).map(([v, c]) => v + ': ' + c).sort().join(', ');
-        lines.push('**' + subLabels[i] + '** (' + sub.length + ' players) — ' + comp);
+        const subCounter = getVocationCounts(sub).summary;
+        lines.push('**' + subLabels[i] + '** — ' + subCounter);
         sortByVocation(sub).forEach(p => lines.push('  ' + formatPlayerLine(p)));
         lines.push('');
       });
     } else {
-      const vocCounts = sorted.reduce((acc, p) => { acc[p.vocation] = (acc[p.vocation] || 0) + 1; return acc; }, {});
-      const comp = Object.entries(vocCounts).map(([v, c]) => v + ': ' + c).sort().join(', ');
-      lines.push('**' + bossName + ' — Team ' + teamNumber + ' (' + teamPlayers.length + '/' + teamSize + ')** — ' + comp, '');
-      if (item.meetsRequirements === false) lines.push('⚠ Does not meet minimum requirements.', '');
-      sorted.forEach(p => lines.push(formatPlayerLine(p)));
+      lines.push('**' + bossName + ' — Team ' + teamNumber + ' (' + teamPlayers.length + '/' + teamSize + ')** — ' + teamCounter, '');
+      const rkSet = (item.redKnights && item.redKnights.length) ? new Set(item.redKnights.map(rk => slotKey(rk))) : new Set();
+      sorted.forEach(p => lines.push(formatPlayerLine(p, '', rkSet.has(slotKey(p)) ? ['Red Knight'] : [])));
       lines.push('');
     }
     if (item.backups && item.backups.length) {
@@ -327,18 +391,19 @@
         let team = generateTeam(remaining, minMax, teamSize, code);
         let meetsRequirements = true;
         if (!team) {
-          team = generateTeamPartial(remaining, teamSize, code);
+          team = generateTeamPartial(remaining, teamSize, code, minMax);
           meetsRequirements = false;
         }
         if (!team.length) break;
         const item = { code, teamNumber: n + 1, team, teamSize, backups: [], meetsRequirements };
+        if (code === 'Z') item.redKnights = [];
         if ((code === 'H' || code === 'L') && team.length) {
           const sub = splitIntoSubParties(team, code);
           if (sub) item.subParties = sub;
         }
         generated.push(item);
-        const used = new Set(team.map(p => p.userId));
-        remaining = remaining.filter(p => !used.has(p.userId));
+        const usedIds = new Set(team.map(p => p.userId));
+        remaining = remaining.filter(p => !usedIds.has(p.userId));
       }
       const numTeamsForCode = generated.filter(g => g.code === code).length;
       const emptySlot = { code, teamNumber: numTeamsForCode + 1, team: [], teamSize, backups: remaining.length ? remaining : [], meetsRequirements: true };
@@ -368,6 +433,7 @@
         first.team = allPlayers.slice(0, teamSize);
         first.backups = allPlayers.slice(teamSize);
         first.teamNumber = 1;
+        if (code === 'Z') first.redKnights = [];
         if ((code === 'H' || code === 'L') && first.team.length) {
           const sub = splitIntoSubParties(first.team, code);
           if (sub) first.subParties = sub;
@@ -435,6 +501,34 @@
       nameBlock.style.minWidth = '0';
       nameBlock.appendChild(nameSpan);
       nameBlock.appendChild(signupsSpan);
+      for (const code of VALID_TEAM_CODES) {
+        const vocsForBoss = Object.entries(m.vocationToTeams || {}).filter(([, bosses]) => bosses.includes(code)).map(([v]) => v);
+        if (vocsForBoss.length < 2) continue;
+        const prefWrap = document.createElement('div');
+        prefWrap.className = 'char-pref-voc';
+        const label = document.createElement('label');
+        label.textContent = code + ' prefer: ';
+        label.title = 'Preferred vocation for this boss (when you sign up with multiple)';
+        const sel = document.createElement('select');
+        sel.className = 'char-pref-select';
+        vocsForBoss.forEach(v => {
+          const opt = document.createElement('option');
+          opt.value = v;
+          opt.textContent = VOC_SHORT[v] || v;
+          sel.appendChild(opt);
+        });
+        const preferred = (m.vocationPriority && m.vocationPriority[code] && m.vocationPriority[code][0] && vocsForBoss.includes(m.vocationPriority[code][0])) ? m.vocationPriority[code][0] : vocsForBoss[0];
+        sel.value = preferred;
+        sel.addEventListener('change', function () {
+          const chosen = this.value;
+          if (!m.vocationPriority) m.vocationPriority = {};
+          m.vocationPriority[code] = [chosen].concat(vocsForBoss.filter(v => v !== chosen));
+          renderSidebar();
+        });
+        prefWrap.appendChild(label);
+        prefWrap.appendChild(sel);
+        nameBlock.appendChild(prefWrap);
+      }
       row.appendChild(nameBlock);
       list.appendChild(row);
     });
@@ -495,6 +589,12 @@
           teamTitle.insertBefore(warn, teamTitle.firstChild);
         }
         teamDiv.appendChild(teamTitle);
+        if (item.team.length > 0) {
+          const counterLine = document.createElement('div');
+          counterLine.className = 'team-vocation-counter';
+          counterLine.textContent = getVocationCounts(item.team).summary;
+          teamDiv.appendChild(counterLine);
+        }
 
         if (useSubPartyLayout) {
           const labels = code === 'H' ? HOD_SUB_LABELS : LLK_SUB_LABELS;
@@ -541,6 +641,30 @@
             ul.appendChild(li);
           });
           teamDiv.appendChild(ul);
+          if (code === 'Z' && item.team.length > 0) {
+            const rkBox = document.createElement('div');
+            rkBox.className = 'red-knight-box';
+            const rkTitle = document.createElement('h6');
+            rkTitle.textContent = 'Red Knight / Main tank';
+            rkBox.appendChild(rkTitle);
+            const rkUl = document.createElement('ul');
+            rkUl.className = 'red-knight-slot' + (!item.redKnights || !item.redKnights.length ? ' placeholder-empty' : '');
+            rkUl.dataset.max = '2';
+            (item.redKnights || []).slice(0, 2).forEach((p) => {
+              const li = document.createElement('li');
+              li.draggable = true;
+              li.dataset.userId = String(p.userId);
+              li.dataset.vocation = p.vocation;
+              li.dataset.name = p.name;
+              li.dataset.roles = (p.roles || []).join(',');
+              li.dataset.priority = String(p.priority);
+              li.dataset.vocationPriorityRank = String(p.vocationPriorityRank);
+              li.innerHTML = '<span>' + escapeHtml(p.name) + ' <span class="voc">(' + (VOC_SHORT[p.vocation] || p.vocation) + ')</span> <span class="roles">[Red Knight]</span></span>';
+              rkUl.appendChild(li);
+            });
+            rkBox.appendChild(rkUl);
+            teamDiv.appendChild(rkBox);
+          }
         }
         teamsWrap.appendChild(teamDiv);
       });
@@ -623,8 +747,8 @@
 
   function setupDragDrop(previewEl) {
     let dragged = null;
-    const allLis = previewEl.querySelectorAll('.team-slot li, .backup-slot li');
-    const allUls = previewEl.querySelectorAll('.team-slot, .backup-slot');
+    const allLis = previewEl.querySelectorAll('.team-slot li, .backup-slot li, .red-knight-slot li');
+    const allUls = previewEl.querySelectorAll('.team-slot, .backup-slot, .red-knight-slot');
 
     function addListeners(li) {
       li.addEventListener('dragstart', function (e) {
@@ -662,21 +786,39 @@
           }
           syncGeneratedFromPreview();
         } else {
-          dragged.el.remove();
+          const isTargetRk = targetUl.classList.contains('red-knight-slot');
+          const isFromRk = dragged.parentUl.classList.contains('red-knight-slot');
+          if (isTargetRk && targetUl.querySelectorAll('li').length >= 2) return;
+          if (isTargetRk && !isFromRk) {
+            const li = document.createElement('li');
+            li.draggable = true;
+            li.dataset.userId = String(dragged.data.userId);
+            li.dataset.vocation = dragged.data.vocation;
+            li.dataset.name = dragged.data.name;
+            li.dataset.roles = (dragged.data.roles || []).join(',');
+            li.dataset.priority = String(dragged.data.priority);
+            li.dataset.vocationPriorityRank = String(dragged.data.vocationPriorityRank);
+            li.innerHTML = '<span>' + escapeHtml(dragged.data.name) + ' <span class="voc">(' + (VOC_SHORT[dragged.data.vocation] || dragged.data.vocation) + ')</span> <span class="roles">[Red Knight]</span></span>';
+            targetUl.appendChild(li);
+            addListeners(li);
+          } else {
+            dragged.el.remove();
+            const li = document.createElement('li');
+            li.draggable = true;
+            li.dataset.userId = String(dragged.data.userId);
+            li.dataset.vocation = dragged.data.vocation;
+            li.dataset.name = dragged.data.name;
+            li.dataset.roles = (dragged.data.roles || []).join(',');
+            li.dataset.priority = String(dragged.data.priority);
+            li.dataset.vocationPriorityRank = String(dragged.data.vocationPriorityRank);
+            li.innerHTML = isTargetRk ? '<span>' + escapeHtml(dragged.data.name) + ' <span class="voc">(' + (VOC_SHORT[dragged.data.vocation] || dragged.data.vocation) + ')</span> <span class="roles">[Red Knight]</span></span>' : '<span>' + escapeHtml(dragged.data.name) + ' <span class="voc">(' + (VOC_SHORT[dragged.data.vocation] || dragged.data.vocation) + ')</span></span>' + (dragged.data.roles && dragged.data.roles.length ? '<span class="roles">' + escapeHtml(dragged.data.roles.join(', ')) + '</span>' : '');
+            targetUl.appendChild(li);
+            addListeners(li);
+            if (dragged.parentUl.querySelectorAll('li').length === 0) dragged.parentUl.classList.add('placeholder-empty');
+          }
           targetUl.classList.remove('placeholder-empty');
-          const li = document.createElement('li');
-          li.draggable = true;
-          li.dataset.userId = String(dragged.data.userId);
-          li.dataset.vocation = dragged.data.vocation;
-          li.dataset.name = dragged.data.name;
-          li.dataset.roles = (dragged.data.roles || []).join(',');
-          li.dataset.priority = String(dragged.data.priority);
-          li.dataset.vocationPriorityRank = String(dragged.data.vocationPriorityRank);
-          li.innerHTML = '<span>' + escapeHtml(dragged.data.name) + ' <span class="voc">(' + (VOC_SHORT[dragged.data.vocation] || dragged.data.vocation) + ')</span></span>' + (dragged.data.roles && dragged.data.roles.length ? '<span class="roles">' + escapeHtml(dragged.data.roles.join(', ')) + '</span>' : '');
-          targetUl.appendChild(li);
-          addListeners(li);
-          if (dragged.parentUl.querySelectorAll('li').length === 0) dragged.parentUl.classList.add('placeholder-empty');
         }
+        if (dragged.parentUl.classList.contains('red-knight-slot') && dragged.parentUl.querySelectorAll('li').length === 0) dragged.parentUl.classList.add('placeholder-empty');
         syncGeneratedFromPreview();
       });
     }
@@ -700,21 +842,38 @@
         if (!dragged) return;
         if (this.closest('.boss-block').dataset.code !== dragged.code) return;
         if (this === dragged.parentUl) return;
-        dragged.el.remove();
+        const isTargetRk = this.classList.contains('red-knight-slot');
+        const isFromRk = dragged.parentUl.classList.contains('red-knight-slot');
+        if (isTargetRk && this.querySelectorAll('li').length >= 2) return;
+        if (isTargetRk && !isFromRk) {
+          const li = document.createElement('li');
+          li.draggable = true;
+          li.dataset.userId = String(dragged.data.userId);
+          li.dataset.vocation = dragged.data.vocation;
+          li.dataset.name = dragged.data.name;
+          li.dataset.roles = (dragged.data.roles || []).join(',');
+          li.dataset.priority = String(dragged.data.priority);
+          li.dataset.vocationPriorityRank = String(dragged.data.vocationPriorityRank);
+          li.innerHTML = '<span>' + escapeHtml(dragged.data.name) + ' <span class="voc">(' + (VOC_SHORT[dragged.data.vocation] || dragged.data.vocation) + ')</span> <span class="roles">[Red Knight]</span></span>';
+          this.appendChild(li);
+          addListeners(li);
+        } else {
+          dragged.el.remove();
+          const li = document.createElement('li');
+          li.draggable = true;
+          li.dataset.userId = String(dragged.data.userId);
+          li.dataset.vocation = dragged.data.vocation;
+          li.dataset.name = dragged.data.name;
+          li.dataset.roles = (dragged.data.roles || []).join(',');
+          li.dataset.priority = String(dragged.data.priority);
+          li.dataset.vocationPriorityRank = String(dragged.data.vocationPriorityRank);
+          li.innerHTML = isTargetRk ? '<span>' + escapeHtml(dragged.data.name) + ' <span class="voc">(' + (VOC_SHORT[dragged.data.vocation] || dragged.data.vocation) + ')</span> <span class="roles">[Red Knight]</span></span>' : '<span>' + escapeHtml(dragged.data.name) + ' <span class="voc">(' + (VOC_SHORT[dragged.data.vocation] || dragged.data.vocation) + ')</span></span>' + (dragged.data.roles && dragged.data.roles.length ? '<span class="roles">' + escapeHtml(dragged.data.roles.join(', ')) + '</span>' : '');
+          this.appendChild(li);
+          addListeners(li);
+          if (dragged.parentUl.querySelectorAll('li').length === 0) dragged.parentUl.classList.add('placeholder-empty');
+        }
         this.classList.remove('placeholder-empty');
-        const li = document.createElement('li');
-        li.draggable = true;
-        li.dataset.userId = String(dragged.data.userId);
-        li.dataset.vocation = dragged.data.vocation;
-        li.dataset.name = dragged.data.name;
-        li.dataset.roles = (dragged.data.roles || []).join(',');
-        li.dataset.priority = String(dragged.data.priority);
-        li.dataset.vocationPriorityRank = String(dragged.data.vocationPriorityRank);
-        li.innerHTML = '<span>' + escapeHtml(dragged.data.name) + ' <span class="voc">(' + (VOC_SHORT[dragged.data.vocation] || dragged.data.vocation) + ')</span></span>' + (dragged.data.roles && dragged.data.roles.length ? '<span class="roles">' + escapeHtml(dragged.data.roles.join(', ')) + '</span>' : '');
-        this.appendChild(li);
-        addListeners(li);
-        if (dragged.parentUl.querySelectorAll('li').length === 0) dragged.parentUl.classList.add('placeholder-empty');
-        if (dragged.parentUl.classList.contains('backup-slot') && dragged.parentUl.querySelectorAll('li').length === 0) dragged.parentUl.classList.add('placeholder-empty');
+        if (dragged.parentUl.classList.contains('red-knight-slot') && dragged.parentUl.querySelectorAll('li').length === 0) dragged.parentUl.classList.add('placeholder-empty');
         syncGeneratedFromPreview();
       });
     });
@@ -783,6 +942,45 @@
             if (sub) item.subParties = sub;
           }
           reorderUlByVocation(ul, sorted);
+          if (code === 'Z' && item.redKnights) {
+            const rkUl = teamDiv.querySelector('.red-knight-slot');
+            if (rkUl) {
+              const rkPlayers = [];
+              rkUl.querySelectorAll('li').forEach(li => rkPlayers.push(playerFromLi(li)));
+              item.redKnights = rkPlayers.slice(0, 2);
+            }
+          }
+        }
+        item.meetsRequirements = item.team.length > 0 && teamMeetsRequirements(item.team, code, item.teamSize);
+        const h5 = teamDiv.querySelector('h5');
+        const warnEl = h5 && h5.querySelector('.team-warning-icon');
+        if (item.meetsRequirements || item.team.length === 0) {
+          teamDiv.classList.remove('team-incomplete');
+          if (warnEl) warnEl.remove();
+        } else {
+          teamDiv.classList.add('team-incomplete');
+          if (!warnEl && h5) {
+            const warn = document.createElement('span');
+            warn.className = 'team-warning-icon';
+            warn.title = 'This team does not meet the minimum vocation/size requirements. You can still use it if you want.';
+            warn.setAttribute('aria-label', 'Does not meet minimum requirements');
+            warn.textContent = '\u26A0\uFE0F';
+            h5.insertBefore(warn, h5.firstChild);
+          }
+        }
+        let counterEl = teamDiv.querySelector('.team-vocation-counter');
+        if (item.team.length > 0) {
+          const summary = getVocationCounts(item.team).summary;
+          if (counterEl) {
+            counterEl.textContent = summary;
+          } else {
+            counterEl = document.createElement('div');
+            counterEl.className = 'team-vocation-counter';
+            counterEl.textContent = summary;
+            teamDiv.insertBefore(counterEl, h5 ? h5.nextSibling : teamDiv.firstChild);
+          }
+        } else if (counterEl) {
+          counterEl.remove();
         }
       });
       const backupBox = bossBlock.querySelector('.backup-box');
@@ -821,7 +1019,7 @@
     const stepPreview = document.getElementById('step-preview');
     const spec = parseTeamCodesInput(input);
     if (!spec.length) {
-      status.textContent = 'Enter codes like P2 Z1 F1.';
+      status.textContent = 'Enter codes like P1 Z1 F1.';
       status.className = 'status error';
       return;
     }

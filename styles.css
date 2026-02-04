@@ -270,6 +270,30 @@ body {
   margin-top: 2px;
 }
 
+.character-row .char-pref-voc {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.character-row .char-pref-voc label {
+  flex-shrink: 0;
+  margin: 0;
+}
+
+.character-row .char-pref-select {
+  padding: 2px 6px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 0.75rem;
+  max-width: 80px;
+}
+
 /* Teams preview */
 .teams-preview {
   margin-bottom: 16px;
@@ -369,9 +393,16 @@ body {
 }
 
 .team-block h5 {
-  margin: 0 0 8px;
+  margin: 0 0 4px;
   font-size: 0.9rem;
   color: var(--text-muted);
+}
+
+.team-vocation-counter {
+  margin: 0 0 8px;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  opacity: 0.9;
 }
 
 .team-block.empty-team {
@@ -396,11 +427,11 @@ body {
 }
 
 .team-subparties-hod {
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .team-subparties-llk {
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .team-block.team-has-subparties {
@@ -418,6 +449,63 @@ body {
   margin: 0 0 6px;
   font-size: 0.8rem;
   font-weight: 600;
+  color: var(--text-muted);
+}
+
+.sub-party {
+  min-width: 0;
+}
+
+.sub-party .team-slot li,
+.team-slot li {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.red-knight-box {
+  margin-top: 10px;
+  padding: 8px 10px;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 6px;
+  border: 1px solid var(--border);
+}
+
+.red-knight-box h6 {
+  margin: 0 0 6px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.red-knight-slot {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  min-height: 20px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.red-knight-slot li {
+  padding: 4px 8px;
+  font-size: 0.85rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.red-knight-slot.placeholder-empty {
+  min-height: 32px;
+}
+
+.red-knight-slot.placeholder-empty::after {
+  content: '2 slots (drag from team)';
+  grid-column: 1 / -1;
+  font-size: 0.75rem;
   color: var(--text-muted);
 }
 

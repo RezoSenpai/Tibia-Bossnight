@@ -30,7 +30,8 @@
         </section>
         <section class="card sidebar-characters" id="sidebar-characters">
           <h2>Imported characters</h2>
-          <p class="hint">Set <strong>priority</strong>: 0 = highest (picked first), 1, 2, etc.</p>
+          <p class="hint">Set <strong>priority</strong> (0 = first). If you sign up with multiple vocations for the same
+            boss, use <strong>«boss» prefer:</strong> to choose which one the script picks first.</p>
           <div id="sidebar-list" class="sidebar-list"></div>
         </section>
       </aside>
@@ -42,7 +43,8 @@
           <p><strong>Selection order:</strong> The script picks players in this order: first by
             <strong>priority</strong> (0 = highest, picked first), then by <strong>vocation preference</strong> if you
             signed up with multiple vocations for the same boss, then by name. Anyone who doesn’t fit in a team becomes
-            a <strong>back-up</strong>.</p>
+            a <strong>back-up</strong>.
+          </p>
           <p><strong>Complete team:</strong> A team that meets the minimum vocation and size rules below. If there
             aren’t enough sign-ups, a <strong>partial team</strong> is still shown (with ⚠️); you can use it or adjust
             manually.</p>
@@ -50,35 +52,32 @@
             1), the script merges everyone into one team, puts the lowest-priority overflow in back-up, and hides the
             empty team.</p>
           <h3>Requirements per boss (complete teams)</h3>
-          <p class="info-box-hint">“Shooters” = MS + RP combined. “Max” = team size. “Min” = minimum of that vocation.
-          </p>
+          <p class="info-box-hint">“Shooters” = MS + RP combined.</p>
           <ul class="requirements-list">
-            <li><strong>Pale (P)</strong> — Max 10 players. Minimum 1 EK, 1 ED, and at least 2 shooters (MS + RP
-              combined).</li>
-            <li><strong>Zelos (Z)</strong> — Max 10 players. Minimum 2 EK (max 3), 2 ED, 2 MS, 2 RP. If you have 3 EKs
-              you also need at least 3 EDs and 1 RP.</li>
-            <li><strong>Ferumbras (F)</strong> — Max 15 players. Minimum 2 EK, 2 ED, at least 1 MS, and at least 3
-              shooters (MS + RP) in total.</li>
-            <li><strong>Heart of Destruction (H)</strong> — Max 15 players. Minimum 3 EK (max 6), 3 ED, at least 1 MS,
-              and at least 5 shooters in total. Team is split into 3 groups: Left, Middle, Right (5 each).</li>
-            <li><strong>Last Lore Keeper (L)</strong> — Max 15 players. Minimum 4 EK, 4 ED, at least 1 MS, and at least
-              5 shooters in total. Team is split into 4 groups: Top Left, Top Right, Bottom Left, Bottom Right.</li>
-            <li><strong>Cults (C)</strong> — Max 10 players. Minimum 1 EK, 1 ED, 1 RP, and at least 2 shooters in total.
-            </li>
-            <li><strong>The First Dragon (D)</strong> — Max 15 players. Minimum 2 EK and 2 ED.</li>
+            <li><strong>Pale (P)</strong> — Max 10. Min 1 EK, 1 ED, 2 shooters. No special roles.</li>
+            <li><strong>Zelos (Z)</strong> — Max 10. Min 2 EK, 2 ED, 2 MS, 2 RP. Max 3 EK. If 3 EK: min 1 RP + 3 ED. Red
+              Knight / Main tank = 1 EK+ED combo (assign 2 in the small box; they get [Red Knight] in copy).</li>
+            <li><strong>Ferumbras (F)</strong> — Max 15. Min 2 EK, 2 ED, 1 MS, 3 shooters. (If more EK, ~70–80% should
+              have Sio; 1 EK puts Feru in spot — not enforced by script.)</li>
+            <li><strong>Heart of Destruction (H)</strong> — Max 15. Min 3 EK, 3 ED, 1 MS, 5 shooters. Max 6 EK. Prefer 1
+              ED per EK. Mini teams: 1 EK/ED combo + 3 others (5 per group). Left, Middle, Right.</li>
+            <li><strong>Last Lore Keeper (L)</strong> — Max 15. Min 4 EK, 4 ED, 1 MS, 5 shooters. Mini teams: 1 EK/ED
+              combo each. Top Left, Top Right, Bottom Left, Bottom Right.</li>
+            <li><strong>Cults (C)</strong> — Max 10. Min 1 EK, 1 ED, 1 RP, 2 shooters. EK/ED combo for boss, RP for
+              Yalahari.</li>
+            <li><strong>The First Dragon (D)</strong> — Max 15. Min 2 EK, 2 ED.</li>
           </ul>
           <h3>Preferred setup</h3>
-          <p>Teams are filled up to the boss size (10 or 15) while respecting the min/max per vocation. For
-            <strong>HoD</strong> the team is shown as three boxes (Left, Middle, Right); for <strong>LLK</strong> as
-            four boxes (Top Left, Top Right, Bottom Left, Bottom Right). The copy text for each team is one combined
-            message with those sections inside it.</p>
+          <p>Teams are filled to boss size respecting min/max. HoD = 3 boxes (Left, Middle, Right); LLK = 4 boxes.
+            Virgins: prefer same native language in mini team (manual). Copy = one message per team with sections
+            inside.</p>
         </section>
         <section class="card">
           <h2>2. Generate teams</h2>
-          <p class="hint">Boss codes + count: <code>P2 Z1 F1</code> = 2 Pale, 1 Zelos, 1 Feru.</p>
+          <p class="hint">Boss codes + count: <code>P1 Z1 F1</code> = 1 Pale, 1 Zelos, 1 Feru.</p>
           <div class="row">
-            <input type="text" id="team-codes" class="input-codes" placeholder="P2 Z1 F1 H1 L1 C1"
-              value="P2 Z1 F1 H1 L1 C1">
+            <input type="text" id="team-codes" class="input-codes" placeholder="P1 Z1 F1 H1 L1 C1"
+              value="P1 Z1 F1 H1 L1 C1">
             <button type="button" class="btn btn-primary" id="btn-generate">Generate teams</button>
           </div>
           <div id="generate-status" class="status"></div>
