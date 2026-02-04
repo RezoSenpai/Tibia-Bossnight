@@ -14,6 +14,10 @@
     em: 'Exalted Monk', exaltedmonk: 'Exalted Monk', monk: 'Exalted Monk'
   };
   const VOC_SHORT = { 'Elite Knight': 'EK', 'Elder Druid': 'ED', 'Master Sorcerer': 'MS', 'Royal Paladin': 'RP', 'Exalted Monk': 'EM' };
+  const VOC_ORDER = { 'Elite Knight': 0, 'Elder Druid': 1, 'Master Sorcerer': 2, 'Royal Paladin': 3, 'Exalted Monk': 4 };
+  function sortByVocation(players) {
+    return players.slice().sort((a, b) => (VOC_ORDER[a.vocation] !== undefined ? VOC_ORDER[a.vocation] : 99) - (VOC_ORDER[b.vocation] !== undefined ? VOC_ORDER[b.vocation] : 99) || (a.name || '').toLowerCase().localeCompare((b.name || '').toLowerCase()));
+  }
 
   function getBossRequirements(code) {
     code = code.toUpperCase();
@@ -215,39 +219,49 @@
     return (indent || '') + p.name + ' (' + p.vocation + ')' + levelStr + rolesStr;
   }
 
-  function formatTeamsForDiscord(generated, bossNames, skipEmpty) {
+  function formatOneTeamForDiscord(item, bossNames) {
     const lines = [];
-    const items = skipEmpty ? generated.filter(item => item.team && item.team.length > 0) : generated;
-    items.forEach((item) => {
-      const { code, teamNumber, team: teamPlayers, teamSize } = item;
-      const bossName = (bossNames && bossNames[code]) || code;
-      const needsSplit = code === 'H' || code === 'L';
-      const subParties = needsSplit ? splitIntoSubParties(teamPlayers, code) : null;
+    const { code, teamNumber, team: teamPlayers, teamSize } = item;
+    const bossName = (bossNames && bossNames[code]) || code;
+    const sorted = sortByVocation(teamPlayers);
+    const needsSplit = code === 'H' || code === 'L';
+    const subParties = needsSplit ? splitIntoSubParties(teamPlayers, code) : null;
 
-      if (subParties && subParties.length) {
-        const subLabels = code === 'H' ? ['Left', 'Mid', 'Right'] : ['Top Left', 'Top Right', 'Bottom Left', 'Bottom Right'];
-        lines.push('**' + bossName + ' — Team ' + teamNumber + ' (' + teamPlayers.length + '/' + teamSize + ')**', '');
-        subParties.forEach((sub, i) => {
-          const vocCounts = sub.reduce((acc, p) => { acc[p.vocation] = (acc[p.vocation] || 0) + 1; return acc; }, {});
-          const comp = Object.entries(vocCounts).map(([v, c]) => v + ': ' + c).sort().join(', ');
-          lines.push('**' + subLabels[i] + '** (' + sub.length + ' players) — ' + comp);
-          sub.sort((a, b) => (a.vocation.localeCompare(b.vocation)) || (a.name.toLowerCase().localeCompare(b.name.toLowerCase()))).forEach(p => lines.push('  ' + formatPlayerLine(p)));
-          lines.push('');
-        });
-      } else {
-        const vocCounts = teamPlayers.reduce((acc, p) => { acc[p.vocation] = (acc[p.vocation] || 0) + 1; return acc; }, {});
+    if (subParties && subParties.length) {
+      const subLabels = code === 'H' ? ['Left', 'Mid', 'Right'] : ['Top Left', 'Top Right', 'Bottom Left', 'Bottom Right'];
+      lines.push('**' + bossName + ' — Team ' + teamNumber + ' (' + teamPlayers.length + '/' + teamSize + ')**', '');
+      subParties.forEach((sub, i) => {
+        const vocCounts = sub.reduce((acc, p) => { acc[p.vocation] = (acc[p.vocation] || 0) + 1; return acc; }, {});
         const comp = Object.entries(vocCounts).map(([v, c]) => v + ': ' + c).sort().join(', ');
-        lines.push('**' + bossName + ' — Team ' + teamNumber + ' (' + teamPlayers.length + '/' + teamSize + ')** — ' + comp, '');
-        teamPlayers.sort((a, b) => (a.vocation.localeCompare(b.vocation)) || (a.name.toLowerCase().localeCompare(b.name.toLowerCase()))).forEach(p => lines.push(formatPlayerLine(p)));
+        lines.push('**' + subLabels[i] + '** (' + sub.length + ' players) — ' + comp);
+        sortByVocation(sub).forEach(p => lines.push('  ' + formatPlayerLine(p)));
         lines.push('');
-      }
-      if (item.backups && item.backups.length) {
-        lines.push('**Back-up / Reserves:**', '');
-        item.backups.sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase())).forEach(p => lines.push(formatPlayerLine(p)));
-        lines.push('');
-      }
-    });
+      });
+    } else {
+      const vocCounts = sorted.reduce((acc, p) => { acc[p.vocation] = (acc[p.vocation] || 0) + 1; return acc; }, {});
+      const comp = Object.entries(vocCounts).map(([v, c]) => v + ': ' + c).sort().join(', ');
+      lines.push('**' + bossName + ' — Team ' + teamNumber + ' (' + teamPlayers.length + '/' + teamSize + ')** — ' + comp, '');
+      sorted.forEach(p => lines.push(formatPlayerLine(p)));
+      lines.push('');
+    }
+    if (item.backups && item.backups.length) {
+      lines.push('**Back-up / Reserves:**', '');
+      item.backups.sort((a, b) => (a.name || '').toLowerCase().localeCompare((b.name || '').toLowerCase())).forEach(p => lines.push(formatPlayerLine(p)));
+      lines.push('');
+    }
     return lines.join('\n');
+  }
+
+  function formatTeamsForDiscord(generated, bossNames, skipEmpty) {
+    const items = skipEmpty ? generated.filter(item => item.team && item.team.length > 0) : generated;
+    return items.map(item => formatOneTeamForDiscord(item, bossNames)).join('\n');
+  }
+
+  function getPerTeamCopyChunks(generated, bossNames) {
+    return generated.filter(item => item.team && item.team.length > 0).map(item => {
+      const bossName = (bossNames && bossNames[item.code]) || item.code;
+      return { label: bossName + ' Team ' + item.teamNumber, text: formatOneTeamForDiscord(item, bossNames) };
+    });
   }
 
   function parseTeamCodesInput(str) {
@@ -302,8 +316,8 @@
     }
     wrap.classList.remove('hidden');
     list.innerHTML = '';
-    state.members.forEach((m, idx) => {
-      m.priority = idx;
+    const sorted = state.members.slice().sort((a, b) => (a.priority - b.priority) || (a.name || '').toLowerCase().localeCompare((b.name || '').toLowerCase()));
+    sorted.forEach((m) => {
       const signups = [];
       for (const [voc, bosses] of Object.entries(m.vocationToTeams || {}))
         signups.push((VOC_SHORT[voc] || voc) + ': ' + [...bosses].sort((a, b) => VALID_TEAM_CODES.indexOf(a) - VALID_TEAM_CODES.indexOf(b)).join(''));
@@ -315,13 +329,11 @@
       priorityInput.max = 999;
       priorityInput.className = 'char-priority';
       priorityInput.value = m.priority;
-      priorityInput.title = 'Priority (lower = picked first)';
+      priorityInput.title = 'Priority: 0 = best, 1 = next, etc. Same as BossNight cog. Script picks by this order; lower = in team first, higher = backup if full.';
       priorityInput.addEventListener('change', function () {
         const v = parseInt(this.value, 10);
         if (!isNaN(v) && v >= 0) {
           m.priority = v;
-          state.members.sort((a, b) => a.priority - b.priority);
-          state.members.forEach((mm, i) => { mm.priority = i; });
           renderSidebar();
         }
       });
@@ -378,9 +390,12 @@
         teamDiv.className = 'team-block' + (item.team.length === 0 ? ' empty-team' : '');
         teamDiv.dataset.code = code;
         teamDiv.dataset.teamIndex = String(teamIdx);
+        const teamTitle = document.createElement('h5');
+        teamTitle.textContent = bossName + ' Team ' + item.teamNumber;
+        teamDiv.appendChild(teamTitle);
         const ul = document.createElement('ul');
         ul.className = 'team-slot' + (item.team.length === 0 ? ' placeholder-empty' : '');
-        item.team.forEach((p) => {
+        sortByVocation(item.team).forEach((p) => {
           const li = document.createElement('li');
           li.draggable = true;
           li.dataset.userId = String(p.userId);
@@ -398,8 +413,45 @@
       preview.appendChild(bossDiv);
     });
 
-    output.value = formatTeamsForDiscord(state.generated, BOSS_NAMES, true);
+    renderOutputBoxes();
     setupDragDrop(preview);
+  }
+
+  function renderOutputBoxes() {
+    const container = document.getElementById('output-boxes');
+    const fullOutput = document.getElementById('output-text');
+    if (!container) return;
+    container.innerHTML = '';
+    if (!state.generated || !state.generated.length) return;
+    const chunks = getPerTeamCopyChunks(state.generated, BOSS_NAMES);
+    if (fullOutput) fullOutput.value = chunks.map(c => c.text).join('\n');
+    chunks.forEach((chunk, idx) => {
+      const box = document.createElement('div');
+      box.className = 'output-team-box';
+      const label = document.createElement('label');
+      label.textContent = chunk.label;
+      const ta = document.createElement('textarea');
+      ta.className = 'output-team-textarea';
+      ta.readOnly = true;
+      ta.value = chunk.text;
+      const copyBtn = document.createElement('button');
+      copyBtn.type = 'button';
+      copyBtn.className = 'btn btn-sm copy-team-btn';
+      copyBtn.textContent = 'Copy';
+      copyBtn.addEventListener('click', function () {
+        ta.select();
+        try {
+          if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(ta.value);
+          else document.execCommand('copy');
+          copyBtn.textContent = 'Copied!';
+          setTimeout(() => { copyBtn.textContent = 'Copy'; }, 1500);
+        } catch (e) { }
+      });
+      box.appendChild(label);
+      box.appendChild(ta);
+      box.appendChild(copyBtn);
+      container.appendChild(box);
+    });
   }
 
   function setupDragDrop(previewEl) {
@@ -500,6 +552,28 @@
     });
   }
 
+  function reorderUlByVocation(ul, sortedPlayers) {
+    if (!sortedPlayers.length) return;
+    const lis = ul.querySelectorAll('li');
+    const byKey = {};
+    lis.forEach(li => {
+      const k = li.dataset.userId + '|' + (li.dataset.vocation || '');
+      if (!byKey[k]) byKey[k] = [];
+      byKey[k].push(li);
+    });
+    const fragment = document.createDocumentFragment();
+    sortedPlayers.forEach(p => {
+      const k = String(p.userId) + '|' + (p.vocation || '');
+      const list = byKey[k];
+      if (list && list.length) {
+        fragment.appendChild(list[0]);
+        list.shift();
+      }
+    });
+    ul.innerHTML = '';
+    ul.appendChild(fragment);
+  }
+
   function syncGeneratedFromPreview() {
     const preview = document.getElementById('teams-preview');
     if (!preview || !state.generated) return;
@@ -508,7 +582,6 @@
       if (!byCode[item.code]) byCode[item.code] = [];
       byCode[item.code].push(item);
     });
-    let genIdx = 0;
     preview.querySelectorAll('.boss-block').forEach(bossBlock => {
       const code = bossBlock.dataset.code;
       const items = byCode[code];
@@ -520,12 +593,14 @@
         if (!ul) return;
         const newTeam = [];
         ul.querySelectorAll('li').forEach(li => newTeam.push(playerFromLi(li)));
-        item.team = newTeam;
-        genIdx++;
+        const sorted = sortByVocation(newTeam);
+        item.team = sorted;
+        reorderUlByVocation(ul, sorted);
       });
     });
     const output = document.getElementById('output-text');
     if (output) output.value = formatTeamsForDiscord(state.generated, BOSS_NAMES, true);
+    renderOutputBoxes();
   }
 
   document.getElementById('btn-import').addEventListener('click', function () {

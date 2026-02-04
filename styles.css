@@ -332,6 +332,50 @@ body {
   color: var(--text-muted);
 }
 
+.output-boxes {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.output-team-box {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 8px;
+  padding: 10px;
+  border: 1px solid var(--border);
+}
+
+.output-team-box label {
+  margin: 0;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.output-team-textarea {
+  width: 100%;
+  min-height: 100px;
+  max-height: 180px;
+  padding: 8px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: rgba(0, 0, 0, 0.3);
+  color: var(--text);
+  font-family: 'Consolas', 'Monaco', monospace;
+  font-size: 0.78rem;
+  resize: vertical;
+}
+
+.output-team-box .btn-sm {
+  padding: 4px 10px;
+  font-size: 0.82rem;
+  align-self: flex-start;
+}
+
 .output-textarea {
   width: 100%;
   min-height: 180px;

@@ -30,7 +30,8 @@
         </section>
         <section class="card sidebar-characters" id="sidebar-characters">
           <h2>Imported characters</h2>
-          <p class="hint">Set <strong>priority</strong> (lower = picked first). Drag order or use the number.</p>
+          <p class="hint">Set <strong>priority</strong>: 0 = highest (picked first), 1, 2, … Same as BossNight cog.
+            Script decides who makes the team and who is backup.</p>
           <div id="sidebar-list" class="sidebar-list"></div>
         </section>
       </aside>
@@ -59,7 +60,9 @@
             <span id="copy-status" class="status"></span>
           </div>
           <div class="output-section">
-            <label for="output-text">Formatted text (paste into Discord)</label>
+            <label>Copy per team (paste into Discord)</label>
+            <div id="output-boxes" class="output-boxes"></div>
+            <label for="output-text">Full formatted text</label>
             <textarea id="output-text" class="output-textarea" readonly></textarea>
           </div>
         </section>
