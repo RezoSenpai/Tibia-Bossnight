@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Boss Night Team Builder</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+  <div class="app">
+    <header class="header">
+      <h1>⚔️ Boss Night Team Builder</h1>
+      <p class="tagline">Import sign-ups, generate teams, drag to adjust, then copy and paste into Discord.</p>
+    </header>
+
+    <!-- Step 1: Import -->
+    <section class="card step" id="step-import">
+      <h2>Step 1 – Import sign-ups</h2>
+      <p class="hint">Paste one line per player. Format: <code>@Name (Vocation) BossCodes</code>. Example:
+        <code>@Blu Yei (EK) PZFHL</code> or <code>Alice (MS) PZ (ED) FHL</code>.</p>
+      <textarea id="import-text" class="import-textarea"
+        placeholder="@Player One (EK) PZFHLC&#10;@Player Two (MS) PZF (ED) HL&#10;Virtual Player / Alt (RP) ZF"></textarea>
+      <div class="row">
+        <button type="button" class="btn btn-primary" id="btn-import">Import</button>
+        <span id="import-status" class="status"></span>
+      </div>
+      <div id="players-list" class="players-list hidden">
+        <h3>Players and sign-ups</h3>
+        <p class="hint">Add roles (e.g. Red Knight, Mentor) and set vocation priority per boss if a player has multiple
+          vocations for the same boss.</p>
+        <div id="players-container"></div>
+      </div>
+    </section>
+
+    <!-- Step 2: Generate -->
+    <section class="card step" id="step-generate">
+      <h2>Step 2 – Generate teams</h2>
+      <p class="hint">Enter boss codes and how many teams per boss. Examples: <code>P2 Z1 F1</code> (2 Pale, 1 Zelos, 1
+        Feru), <code>P1 Z1 H1 L1 C1</code>.</p>
+      <div class="row">
+        <input type="text" id="team-codes" class="input-codes" placeholder="P2 Z1 F1 H1 L1 C1"
+          value="P2 Z1 F1 H1 L1 C1">
+        <button type="button" class="btn btn-primary" id="btn-generate">Generate teams</button>
+      </div>
+      <div id="generate-status" class="status"></div>
+    </section>
+
+    <!-- Step 3: Preview (drag & drop) -->
+    <section class="card step hidden" id="step-preview">
+      <h2>Step 3 – Preview and adjust</h2>
+      <p class="hint">Drag players between teams or reorder. When you’re happy, copy the formatted text below and paste
+        it into Discord.</p>
+      <div id="teams-preview" class="teams-preview"></div>
+      <div class="row actions">
+        <button type="button" class="btn btn-secondary" id="btn-regen">Regenerate</button>
+        <button type="button" class="btn btn-primary" id="btn-copy">Copy formatted text</button>
+        <span id="copy-status" class="status"></span>
+      </div>
+      <div class="output-section">
+        <label for="output-text">Formatted text (for Discord)</label>
+        <textarea id="output-text" class="output-textarea" readonly></textarea>
+      </div>
+    </section>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+
+</html>
