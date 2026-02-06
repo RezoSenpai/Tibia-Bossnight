@@ -77,10 +77,9 @@
       const matches = getSignupMatches(trimmed);
       if (!matches.length) continue;
 
-      const userId = -(Math.abs(hashCode(characterName)) % 1000000 + 1000);
-      let member = members.find(m => m.id === userId);
+      let member = members.find(m => m.name.toLowerCase() === characterName.toLowerCase());
       if (!member) {
-        member = { id: userId, name: characterName, priority: members.length, vocationToTeams: {}, bossRoles: {}, vocationPriority: {} };
+        member = { id: members.length + 1, name: characterName, priority: 0, vocationToTeams: {}, bossRoles: {}, vocationPriority: {} };
         members.push(member);
       }
       member.name = characterName;
@@ -95,22 +94,24 @@
     return members;
   }
 
-  function hashCode(s) {
-    let h = 0;
-    for (let i = 0; i < s.length; i++) h = ((h << 5) - h) + s.charCodeAt(i) | 0;
-    return h;
-  }
-
   function buildPlayersForBoss(members, code) {
     const players = [];
     for (const m of members) {
+      const vocsForThisBoss = Object.entries(m.vocationToTeams || {})
+        .filter(([, bosses]) => bosses.includes(code))
+        .map(([v]) => v);
+      const isOnlyVocation = vocsForThisBoss.length === 1;
+
       for (const [voc, bosses] of Object.entries(m.vocationToTeams || {})) {
         if (!bosses.includes(code)) continue;
         const roles = (m.bossRoles && m.bossRoles[code]) ? m.bossRoles[code].slice() : [];
         let vocationPriorityRank = 999;
-        if (m.vocationPriority && m.vocationPriority[code] && m.vocationPriority[code].indexOf(voc) !== -1)
-          vocationPriorityRank = m.vocationPriority[code].indexOf(voc);
-        players.push({ userId: m.id, name: m.name, vocation: voc, priority: m.priority, level: m.level || null, roles: roles, vocationPriorityRank: vocationPriorityRank });
+        if (m.vocationPriority && m.vocationPriority[code]) {
+          const idx = m.vocationPriority[code].indexOf(voc);
+          vocationPriorityRank = idx === -1 ? 999 : idx;
+        }
+        const isPrimaryChoice = isOnlyVocation || vocationPriorityRank === 0;
+        players.push({ userId: m.id, name: m.name, vocation: voc, priority: m.priority, level: m.level || null, roles: roles, vocationPriorityRank: vocationPriorityRank, isPrimaryChoice: isPrimaryChoice });
       }
     }
     return players;
@@ -142,6 +143,24 @@
     return team.length <= teamSize;
   }
 
+  /**
+   * Find the best available candidate across all vocations that haven't hit their max.
+   * @param {boolean} primaryOnly - If true, only consider candidates whose isPrimaryChoice is true
+   */
+  function findBestCandidate(byVocation, selectedIds, minMax, counts, primaryOnly) {
+    let best = null, bestVoc = null;
+    for (const [vocation, [vMin, vMax]] of Object.entries(minMax)) {
+      if (counts[vocation] >= vMax) continue;
+      const remaining = (byVocation[vocation] || []).filter(p => !selectedIds.has(p.userId) && (!primaryOnly || p.isPrimaryChoice));
+      if (!remaining.length) continue;
+      const c = remaining[0];
+      if (!best || c.priority < best.priority || (c.priority === best.priority && c.vocationPriorityRank < best.vocationPriorityRank)) {
+        best = c; bestVoc = vocation;
+      }
+    }
+    return best ? { player: best, vocation: bestVoc } : null;
+  }
+
   function generateTeam(players, minMax, teamSize, bossCode) {
     const pool = players.slice();
     if (!pool.length) return null;
@@ -150,7 +169,7 @@
     const byVocation = {};
     pool.forEach(p => { if (!byVocation[p.vocation]) byVocation[p.vocation] = []; byVocation[p.vocation].push(p); });
     Object.keys(byVocation).forEach(voc => {
-      byVocation[voc].sort((a, b) => (a.vocationPriorityRank - b.vocationPriorityRank) || (a.priority - b.priority) || (a.name || '').toLowerCase().localeCompare((b.name || '').toLowerCase()));
+      byVocation[voc].sort((a, b) => (a.priority - b.priority) || (a.vocationPriorityRank - b.vocationPriorityRank) || (a.name || '').toLowerCase().localeCompare((b.name || '').toLowerCase()));
     });
 
     const team = [];
@@ -158,30 +177,45 @@
     const counts = {};
     Object.keys(minMax).forEach(v => { counts[v] = 0; });
 
+    // Phase 1: Fill minimum requirements — prefer primary-choice players first
     for (const [vocation, [vMin]] of Object.entries(minMax)) {
-      const candidates = (byVocation[vocation] || []).filter(p => !selectedIds.has(p.userId));
-      if (candidates.length < vMin) return null;
-      const chosen = candidates.slice(0, vMin);
-      team.push(...chosen);
-      counts[vocation] += chosen.length;
-      chosen.forEach(p => selectedIds.add(p.userId));
-    }
-
-    while (team.length < teamSize) {
-      let best = null, bestVoc = null;
-      for (const [vocation, [vMin, vMax]] of Object.entries(minMax)) {
-        if (counts[vocation] >= vMax) continue;
-        const remaining = (byVocation[vocation] || []).filter(p => !selectedIds.has(p.userId));
-        if (!remaining.length) continue;
-        const c = remaining[0];
-        if (!best || c.priority < best.priority) { best = c; bestVoc = vocation; }
+      if (vMin <= 0) continue;
+      // First pass: primary-choice candidates only (single-vocation or rank-0 preference)
+      const primaryCandidates = (byVocation[vocation] || []).filter(p => !selectedIds.has(p.userId) && p.isPrimaryChoice);
+      const primaryTake = Math.min(vMin, primaryCandidates.length);
+      for (let i = 0; i < primaryTake; i++) {
+        team.push(primaryCandidates[i]);
+        selectedIds.add(primaryCandidates[i].userId);
+        counts[vocation]++;
       }
-      if (!best) break;
-      team.push(best);
-      counts[bestVoc]++;
-      selectedIds.add(best.userId);
+      // Second pass: if still under minimum, use secondary-choice candidates
+      if (counts[vocation] < vMin) {
+        const secondaryCandidates = (byVocation[vocation] || []).filter(p => !selectedIds.has(p.userId));
+        const needed = vMin - counts[vocation];
+        if (secondaryCandidates.length < needed) return null; // Can't meet minimum
+        for (let i = 0; i < needed; i++) {
+          team.push(secondaryCandidates[i]);
+          selectedIds.add(secondaryCandidates[i].userId);
+          counts[vocation]++;
+        }
+      }
     }
 
+    // Phase 2: Fill remaining slots — prefer primary-choice players first
+    while (team.length < teamSize) {
+      // Pass 1: try primary-choice players only
+      let result = findBestCandidate(byVocation, selectedIds, minMax, counts, true);
+      if (!result) {
+        // Pass 2: try secondary-choice players
+        result = findBestCandidate(byVocation, selectedIds, minMax, counts, false);
+      }
+      if (!result) break;
+      team.push(result.player);
+      counts[result.vocation]++;
+      selectedIds.add(result.player.userId);
+    }
+
+    // Boss-specific validations
     const ekCount = counts['Elite Knight'] || 0, edCount = counts['Elder Druid'] || 0;
     const msCount = counts['Master Sorcerer'] || 0, rpCount = counts['Royal Paladin'] || 0;
     const shooterCount = msCount + rpCount;
@@ -201,7 +235,7 @@
     return team;
   }
 
-  /** Build a best-effort team from pool when full requirements can't be met. Fills minimums first, then by priority; respects vocation min/max when minMax provided. */
+  /** Build a best-effort team from pool when full requirements can't be met. Fills minimums first (primary then secondary), then remaining slots; respects vocation min/max. */
   function generateTeamPartial(players, teamSize, bossCode, minMax) {
     const pool = players.slice();
     if (!pool.length) return [];
@@ -209,36 +243,57 @@
     const byVocation = {};
     pool.forEach(p => { if (!byVocation[p.vocation]) byVocation[p.vocation] = []; byVocation[p.vocation].push(p); });
     Object.keys(byVocation).forEach(voc => {
-      byVocation[voc].sort((a, b) => (a.vocationPriorityRank - b.vocationPriorityRank) || (a.priority - b.priority) || (a.name || '').toLowerCase().localeCompare((b.name || '').toLowerCase()));
+      byVocation[voc].sort((a, b) => (a.priority - b.priority) || (a.vocationPriorityRank - b.vocationPriorityRank) || (a.name || '').toLowerCase().localeCompare((b.name || '').toLowerCase()));
     });
     const team = [];
     const selectedIds = new Set();
     const counts = {};
     if (minMax) Object.keys(minMax).forEach(v => { counts[v] = 0; });
 
+    // Fill minimums — primary choices first, then secondary
     if (minMax) {
       for (const [vocation, [vMin]] of Object.entries(minMax)) {
         if (vMin <= 0) continue;
-        const candidates = (byVocation[vocation] || []).filter(p => !selectedIds.has(p.userId));
-        const take = Math.min(vMin, candidates.length);
-        for (let i = 0; i < take; i++) {
-          team.push(candidates[i]);
-          selectedIds.add(candidates[i].userId);
+        // Primary pass
+        const primaryCandidates = (byVocation[vocation] || []).filter(p => !selectedIds.has(p.userId) && p.isPrimaryChoice);
+        const primaryTake = Math.min(vMin, primaryCandidates.length);
+        for (let i = 0; i < primaryTake; i++) {
+          team.push(primaryCandidates[i]);
+          selectedIds.add(primaryCandidates[i].userId);
           counts[vocation] = (counts[vocation] || 0) + 1;
+        }
+        // Secondary pass if still under minimum
+        if (counts[vocation] < vMin) {
+          const secondaryCandidates = (byVocation[vocation] || []).filter(p => !selectedIds.has(p.userId));
+          const needed = Math.min(vMin - counts[vocation], secondaryCandidates.length);
+          for (let i = 0; i < needed; i++) {
+            team.push(secondaryCandidates[i]);
+            selectedIds.add(secondaryCandidates[i].userId);
+            counts[vocation] = (counts[vocation] || 0) + 1;
+          }
         }
       }
     }
 
-    for (const p of pool) {
-      if (team.length >= teamSize) break;
-      if (selectedIds.has(p.userId)) continue;
-      if (minMax && minMax[p.vocation]) {
-        const vMax = minMax[p.vocation][1];
-        if ((counts[p.vocation] || 0) >= vMax) continue;
+    // Fill remaining — primary choices first, then secondary
+    while (team.length < teamSize) {
+      let result = minMax ? findBestCandidate(byVocation, selectedIds, minMax, counts, true) : null;
+      if (!result) {
+        result = minMax ? findBestCandidate(byVocation, selectedIds, minMax, counts, false) : null;
       }
-      selectedIds.add(p.userId);
-      team.push(p);
-      if (minMax && minMax[p.vocation]) counts[p.vocation] = (counts[p.vocation] || 0) + 1;
+      if (!result) {
+        // Fallback: pick next best from pool regardless of vocation limits
+        const next = pool.find(p => !selectedIds.has(p.userId) && p.isPrimaryChoice);
+        const fallback = next || pool.find(p => !selectedIds.has(p.userId));
+        if (!fallback) break;
+        selectedIds.add(fallback.userId);
+        team.push(fallback);
+        if (minMax && minMax[fallback.vocation]) counts[fallback.vocation] = (counts[fallback.vocation] || 0) + 1;
+        continue;
+      }
+      team.push(result.player);
+      counts[result.vocation]++;
+      selectedIds.add(result.player.userId);
     }
     return team;
   }
@@ -480,7 +535,7 @@
       priorityInput.max = 999;
       priorityInput.className = 'char-priority';
       priorityInput.value = m.priority;
-      priorityInput.title = 'Priority: 0 = best, 1 = next, etc. Same as BossNight cog. Script picks by this order; lower = in team first, higher = backup if full.';
+      priorityInput.title = 'Priority: 0 = default (best). Higher number = penalty (picked later). Only adjust to penalize no-shows etc.';
       priorityInput.addEventListener('change', function () {
         const v = parseInt(this.value, 10);
         if (!isNaN(v) && v >= 0) {
@@ -1007,8 +1062,7 @@
       renderSidebar();
       return;
     }
-    state.members.forEach((m, i) => { m.priority = i; });
-    status.textContent = 'Imported ' + state.members.length + ' character(s). Set priority on the left.';
+    status.textContent = 'Imported ' + state.members.length + ' character(s). All start at priority 0. Adjust penalties on the left.';
     status.className = 'status success';
     renderSidebar();
   });
